@@ -33,7 +33,7 @@ func (f *Fetcher) Fetch(ctx context.Context) (io.ReadCloser, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("Unexpected status code %s", resp.StatusCode)
+		return nil, fmt.Errorf("Unexpected status code %d", resp.StatusCode)
 	}
 
 	return resp.Body, nil
