@@ -2,6 +2,8 @@
 #include <bpf/bpf_helpers.h>
 
 #define MAX_ENTRIES 100000
+#define ETH_P_IPV6 0x86DD
+#define ETH_P_IP 0x0800 
 
 struct ipv4_lpm_key{
     __u32 prefixlen;
@@ -87,8 +89,25 @@ int xdp_parse_func(struct xdp_md *ctx){
 
     struct hdr_cursor nh;
     nh.pos = data;
+    int nh_type = parse_ethhdr(&nh, data_end, &eth);
+
+    if (nh_type == -1) goto out;
+
+    else if (nh_type == bpf_htons(ETH_P_IP)){
+        struct iphdr *ip4; 
+        int ip_proto = parse_ip4hdr(&nh, data_end, &ip4);
+        if (ip_proto == -1) goto out;
+
+        __u32 src =  ip4->saddr;
+
+    }else if (nh_type == bpf_htons(ETH_P_IPV6)){
+
+    }
 
     return action;
+    out:
+        action = XDP_DROP;
+        return action;
 }
 
 char _license[] SEC("license") = "GPL";
