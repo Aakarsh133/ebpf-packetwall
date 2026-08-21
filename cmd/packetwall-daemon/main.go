@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/Aakarsh133/ebpf-packetwall/bpf"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/extractor"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/fetcher"
 
+	"github.com/cilium/ebpf/link"
 	"github.com/joho/godotenv"
 )
 
@@ -26,15 +31,47 @@ func main() {
 	ticker := time.NewTicker(time.Minute * 5)
 	defer ticker.Stop()
 
+	objs := bpf.BpfObjects{}
+
+	if err := bpf.LoadBpfObjects(&objs, nil); err != nil {
+		log.Fatalf("loading objects: %s", err)
+	}
+	defer objs.Close()
+
+	ifacename := "lo"
+	iface, err := net.InterfaceByName(ifacename)
+	if err != nil {
+		log.Fatalf("Cannot load interface: %s", err)
+	}
+
+	xdpLink, err := link.AttachXDP(link.XDPOptions{
+		Program:   objs.XdpParseFunc,
+		Interface: iface.Index,
+	})
+	if err != nil {
+		log.Fatalf("Cannot link with XDP: %s", err)
+	}
+	defer xdpLink.Close()
+	log.Printf("ebpf-packetwall initiated..")
+
 	var isRunning bool
 	log.Println("Streaming...")
 
 	fetcher := fetcher.New(url)
-	executeCycle(&isRunning, fetcher)
 
-	for range ticker.C {
+	go func() {
 		executeCycle(&isRunning, fetcher)
-	}
+
+		for range ticker.C {
+			executeCycle(&isRunning, fetcher)
+		}
+	}()
+
+	stopper := make(chan os.Signal, 1)
+	signal.Notify(stopper, os.Interrupt, syscall.SIGTERM)
+	<-stopper
+
+	log.Printf("Exiting ebpf-packetwall.")
 
 }
 

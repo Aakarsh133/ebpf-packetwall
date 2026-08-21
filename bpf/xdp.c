@@ -61,7 +61,7 @@ int xdp_parse_func(struct xdp_md *ctx){
 
     if (nh_type == -1) goto out;
 
-    else if (nh_type == bpf_htons(ETH_P_IP)){
+    else if (nh_type == __builtin_bswap16(ETH_P_IP)){
 
         struct iphdr *ip4; 
         int ip_proto = parse_ip4hdr(&nh, data_end, &ip4);
@@ -79,7 +79,7 @@ int xdp_parse_func(struct xdp_md *ctx){
         }
 
     }
-    else if (nh_type == bpf_htons(ETH_P_IPV6)){
+    else if (nh_type == __builtin_bswap16(ETH_P_IPV6)){
         struct ipv6hdr *ip6;
         int ip_proto = parse_ip6hdr(&nh, data_end, &ip6);
         if (ip_proto == -1) goto out;
