@@ -119,6 +119,6 @@ func executeCycle(isRunning *bool, f *fetcher.Fetcher, objs bpf.BpfObjects) {
 
 	_, err = objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
 	if err != nil {
-		log.Fatalf("batch update IPv4 LPM map: %v", err)
+		log.Printf("batch update IPv4 LPM map: %v", err)
 	}
 }
