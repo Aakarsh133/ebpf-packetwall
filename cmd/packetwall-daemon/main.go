@@ -13,10 +13,17 @@ import (
 	"github.com/Aakarsh133/ebpf-packetwall/bpf"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/extractor"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/fetcher"
+	"golang.org/x/sys/unix"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/joho/godotenv"
 )
+
+type ipv4LpmKey struct {
+	prefixlen uint32
+	addr      uint32
+}
 
 func main() {
 	err := godotenv.Load(".env")
@@ -60,10 +67,10 @@ func main() {
 	fetcher := fetcher.New(url)
 
 	go func() {
-		executeCycle(&isRunning, fetcher)
+		executeCycle(&isRunning, fetcher, objs)
 
 		for range ticker.C {
-			executeCycle(&isRunning, fetcher)
+			executeCycle(&isRunning, fetcher, objs)
 		}
 	}()
 
@@ -75,7 +82,7 @@ func main() {
 
 }
 
-func executeCycle(isRunning *bool, f *fetcher.Fetcher) {
+func executeCycle(isRunning *bool, f *fetcher.Fetcher, objs bpf.BpfObjects) {
 	if *isRunning {
 		log.Printf("Executing previous stream.. Wait for 5 minutes")
 		return
@@ -94,8 +101,24 @@ func executeCycle(isRunning *bool, f *fetcher.Fetcher) {
 	}
 
 	defer stream.Close()
-	ipS, ip6S := extractor.ParseStream(stream)
+	ip4S, ip6S := extractor.ParseStream(stream)
 
-	log.Printf("Completed Fetching->, IPV4 Records: %d, IPV6 Records: %d", len(ipS), len(ip6S))
+	log.Printf("Completed Fetching->, IPV4 Records: %d, IPV6 Records: %d", len(ip4S), len(ip6S))
 
+	keys := make([]ipv4LpmKey, len(ip4S))
+	for i, ip := range ip4S {
+		keys[i] = ipv4LpmKey{
+			prefixlen: 32,
+			addr:      ip,
+		}
+	}
+	value := make([]uint32, len(ip4S))
+	for i := range ip4S {
+		value[i] = 1
+	}
+
+	_, err = objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
+	if err != nil {
+		log.Fatalf("batch update IPv4 LPM map: %v", err)
+	}
 }
