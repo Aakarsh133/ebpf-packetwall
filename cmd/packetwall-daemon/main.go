@@ -96,6 +96,6 @@ func executeCycle(isRunning *bool, f *fetcher.Fetcher) {
 	defer stream.Close()
 	ipS, ip6S := extractor.ParseStream(stream)
 
-	log.Printf("Completed, %d %d", len(ipS), len(ip6S))
+	log.Printf("Completed Fetching->, IPV4 Records: %d, IPV6 Records: %d", len(ipS), len(ip6S))
 
 }
