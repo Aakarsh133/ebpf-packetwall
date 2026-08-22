@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
@@ -21,8 +22,12 @@ import (
 )
 
 type ipv4LpmKey struct {
-	prefixlen uint32
-	addr      uint32
+	Prefixlen uint32
+	Addr      uint32
+}
+type ipv6LpmKey struct {
+	Prefixlen uint32
+	Addr      [4]uint32
 }
 
 func main() {
@@ -67,10 +72,15 @@ func main() {
 	fetcher := fetcher.New(url)
 
 	go func() {
-		executeCycle(&isRunning, fetcher, objs)
-
+		i := 1
+		log.Printf("Initiating cycle %d", i)
+		executeCycle(&isRunning, fetcher, &objs)
+		log.Printf("Cycle %d completed", i)
 		for range ticker.C {
-			executeCycle(&isRunning, fetcher, objs)
+			i++
+			log.Printf("Initiating cycle %d", i)
+			executeCycle(&isRunning, fetcher, &objs)
+			log.Printf("Cycle %d completed", i)
 		}
 	}()
 
@@ -82,7 +92,53 @@ func main() {
 
 }
 
-func executeCycle(isRunning *bool, f *fetcher.Fetcher, objs bpf.BpfObjects) {
+func updateMaps(ip4S []uint32, ip6S [][16]byte, objs *bpf.BpfObjects) {
+	log.Printf("Inserting Values in maps. ")
+	keys := make([]ipv4LpmKey, len(ip4S))
+	for i, ip := range ip4S {
+		keys[i] = ipv4LpmKey{
+			Prefixlen: 32,
+			Addr:      ip,
+		}
+	}
+	value := make([]uint32, len(ip4S))
+	for i := range ip4S {
+		value[i] = 1
+	}
+
+	_, err := objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
+	if err != nil {
+		log.Printf("batch update IPv4 LPM map: %v", err)
+	}
+
+	keysIp6 := make([]ipv6LpmKey, len(ip6S))
+	value = make([]uint32, len(ip6S))
+	for i := range ip6S {
+		value[i] = 1
+	}
+
+	var KAddr [4]uint32
+
+	for j, ip := range ip6S {
+		KAddr[0] = binary.LittleEndian.Uint32(ip[0:4])
+		KAddr[1] = binary.LittleEndian.Uint32(ip[4:8])
+		KAddr[2] = binary.LittleEndian.Uint32(ip[8:12])
+		KAddr[3] = binary.LittleEndian.Uint32(ip[12:16])
+		keysIp6[j] = ipv6LpmKey{
+			Prefixlen: 128,
+			Addr:      KAddr,
+		}
+	}
+
+	_, err = objs.Ipv6LpmMap.BatchUpdate(keysIp6, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
+	if err != nil {
+		log.Printf("batch update IPv6 LPM map: %v", err)
+	}
+	log.Printf("Values inserted in maps. ")
+
+}
+
+func executeCycle(isRunning *bool, f *fetcher.Fetcher, objs *bpf.BpfObjects) {
 	if *isRunning {
 		log.Printf("Executing previous stream.. Wait for 5 minutes")
 		return
@@ -105,20 +161,6 @@ func executeCycle(isRunning *bool, f *fetcher.Fetcher, objs bpf.BpfObjects) {
 
 	log.Printf("Completed Fetching->, IPV4 Records: %d, IPV6 Records: %d", len(ip4S), len(ip6S))
 
-	keys := make([]ipv4LpmKey, len(ip4S))
-	for i, ip := range ip4S {
-		keys[i] = ipv4LpmKey{
-			prefixlen: 32,
-			addr:      ip,
-		}
-	}
-	value := make([]uint32, len(ip4S))
-	for i := range ip4S {
-		value[i] = 1
-	}
+	updateMaps(ip4S, ip6S, objs)
 
-	_, err = objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
-	if err != nil {
-		log.Printf("batch update IPv4 LPM map: %v", err)
-	}
 }
