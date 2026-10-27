@@ -14,7 +14,6 @@ import (
 	"github.com/Aakarsh133/ebpf-packetwall/bpf"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/extractor"
 	"github.com/Aakarsh133/ebpf-packetwall/pkg/fetcher"
-	"golang.org/x/sys/unix"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -106,7 +105,7 @@ func updateMaps(ip4S []uint32, ip6S [][16]byte, objs *bpf.BpfObjects) {
 		value[i] = 1
 	}
 
-	_, err := objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
+	_, err := objs.Ipv4LpmMap.BatchUpdate(keys, value, &ebpf.BatchOptions{ElemFlags: 1})
 	if err != nil {
 		log.Printf("batch update IPv4 LPM map: %v", err)
 	}
@@ -130,7 +129,7 @@ func updateMaps(ip4S []uint32, ip6S [][16]byte, objs *bpf.BpfObjects) {
 		}
 	}
 
-	_, err = objs.Ipv6LpmMap.BatchUpdate(keysIp6, value, &ebpf.BatchOptions{ElemFlags: unix.BPF_ANY})
+	_, err = objs.Ipv6LpmMap.BatchUpdate(keysIp6, value, &ebpf.BatchOptions{ElemFlags: uint64(ebpf.UpdateAny)})
 	if err != nil {
 		log.Printf("batch update IPv6 LPM map: %v", err)
 	}
